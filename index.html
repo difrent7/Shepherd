@@ -65,6 +65,28 @@
 
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c4a1e; color: #f0f8e8; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-family: Georgia, serif; box-shadow: 0 6px 18px rgba(0,0,0,0.18); opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 999; }
   .toast.show { opacity: 1; }
+
+  /* Per-card share icon */
+  .verse-card { position: relative; }
+  .verse-share-btn { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid #d4c9b0; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; padding: 0; }
+  .verse-share-btn:hover { background: #eaf3de; border-color: #3B6D11; }
+  .verse-share-btn svg { display: block; }
+
+  /* Share sheet overlay */
+  .share-sheet { position: fixed; inset: 0; display: none; align-items: flex-end; justify-content: center; z-index: 1000; }
+  .share-sheet.open { display: flex; }
+  .share-sheet-backdrop { position: absolute; inset: 0; background: rgba(30,24,14,0.45); animation: fadeIn 0.18s ease; }
+  .share-sheet-panel { position: relative; width: 100%; max-width: 420px; background: #f5f0e8; border-radius: 18px 18px 0 0; padding: 1.25rem 1.25rem 1.5rem; box-shadow: 0 -10px 30px rgba(0,0,0,0.15); animation: slideUp 0.22s ease; }
+  .share-sheet-title { text-align: center; font-size: 13px; color: #7a6a50; letter-spacing: 2px; text-transform: uppercase; font-family: Arial, sans-serif; margin-bottom: 1rem; padding-top: 4px; font-weight: 700; }
+  .share-sheet-ref { text-align: center; font-family: Georgia, serif; font-style: italic; color: #3B6D11; font-size: 14px; margin-bottom: 1rem; }
+  .share-sheet-btn { width: 100%; padding: 14px 16px; border: 1px solid #d4c9b0; border-radius: 12px; background: #fff; color: #2c4a1e; font-family: Georgia, serif; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; text-align: left; display: flex; flex-direction: column; gap: 3px; transition: all 0.15s; }
+  .share-sheet-btn:hover:not(:disabled) { background: #eaf3de; border-color: #3B6D11; }
+  .share-sheet-btn:disabled { opacity: 0.55; cursor: wait; }
+  .share-sheet-btn .btn-sub { font-size: 12px; font-weight: 400; color: #7a6a50; font-style: italic; }
+  .share-sheet-btn.cancel { text-align: center; background: transparent; border: none; color: #7a6a50; font-style: italic; margin-top: 6px; }
+  .share-sheet-btn.cancel:hover { background: transparent; color: #2c4a1e; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -172,11 +194,33 @@
       <div class="share-watermark">— SHEPARD · Let His word guide you</div>
     </div>
     <div class="share-btns">
-      <button class="share-btn" onclick="shareVerse('facebook')">Share to Facebook</button>
-      <button class="share-btn" onclick="shareVerse('instagram')">Share to Instagram</button>
-      <button class="share-btn full" onclick="shareVerse('copy')">Copy Verse</button>
+      <button class="share-btn" onclick="shareFromReflect('post')">Share as Post</button>
+      <button class="share-btn" onclick="shareFromReflect('story')">Share as Story</button>
+      <button class="share-btn full" onclick="shareFromReflect('copy')">Copy Verse Text</button>
     </div>
     <button class="primary-btn" style="margin-top:1rem;background:#5a4a35;" onclick="restart()">Start Over</button>
+  </div>
+
+  <!-- Share format picker (bottom sheet) -->
+  <div class="share-sheet" id="share-sheet" onclick="onShareSheetClick(event)">
+    <div class="share-sheet-backdrop"></div>
+    <div class="share-sheet-panel" onclick="event.stopPropagation()">
+      <div class="share-sheet-title">Share this verse</div>
+      <div class="share-sheet-ref" id="share-sheet-ref"></div>
+      <button class="share-sheet-btn" id="btn-share-post" onclick="doShare('post')">
+        <span>Square post</span>
+        <span class="btn-sub">1080 × 1350 — for feed posts</span>
+      </button>
+      <button class="share-sheet-btn" id="btn-share-story" onclick="doShare('story')">
+        <span>Story / Reel</span>
+        <span class="btn-sub">1080 × 1920 — full phone screen</span>
+      </button>
+      <button class="share-sheet-btn" id="btn-share-copy" onclick="doShare('copy')">
+        <span>Copy verse text</span>
+        <span class="btn-sub">Plain text for messages & email</span>
+      </button>
+      <button class="share-sheet-btn cancel" onclick="closeShareSheet()">Cancel</button>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -484,6 +528,14 @@ function renderVerses(verses) {
   verses.forEach((v) => {
     const card = document.createElement('div');
     card.className = 'verse-card';
+
+    // Quick-share icon (top-right)
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'verse-share-btn';
+    shareBtn.setAttribute('aria-label', 'Share this verse');
+    shareBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" stroke="#3B6D11" stroke-width="2" stroke-linecap="round"/><path d="M16 6l-4-4-4 4" stroke="#3B6D11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="2" x2="12" y2="15" stroke="#3B6D11" stroke-width="2" stroke-linecap="round"/></svg>';
+    shareBtn.onclick = (e) => { e.stopPropagation(); openShareSheet(v); };
+
     const ref = document.createElement('div');
     ref.className = 'verse-ref';
     ref.textContent = v.reference;
@@ -496,7 +548,7 @@ function renderVerses(verses) {
     const reason = document.createElement('div');
     reason.className = 'verse-reason';
     reason.textContent = v.reason;
-    card.append(ref, text, reasonLabel, reason);
+    card.append(shareBtn, ref, text, reasonLabel, reason);
     card.onclick = () => {
       document.querySelectorAll('.verse-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
@@ -515,28 +567,268 @@ function goToShare() {
   showScreen('screen-share');
 }
 
-function shareVerse(platform) {
-  if (!selectedVerse) return;
-  const text = '"' + selectedVerse.text + '" — ' + selectedVerse.reference +
-               '\n\nShared via SHEPARD · Let His word guide you';
+// ---- Share flow (image generation + native share) -----------------------
+//
+// When the user taps the share icon on a card, we open a bottom-sheet with
+// format options (post / story / copy text). The chosen format is rendered
+// as a PNG using HTML Canvas and handed to the platform via the Web Share
+// API. On devices that can't share files (desktop, older browsers), the
+// image is offered as a download and the share-sheet instructs the user.
 
-  if (platform === 'facebook') {
-    const pageUrl = window.location.href;
-    const url = 'https://www.facebook.com/sharer/sharer.php?u=' +
-                encodeURIComponent(pageUrl) +
-                '&quote=' + encodeURIComponent(text);
-    window.open(url, '_blank', 'noopener,noreferrer');
-  } else if (platform === 'instagram') {
-    copyToClipboard(text).then((ok) => {
-      if (ok) showToast('Verse copied! Paste into your Instagram story or post.');
-      else alert('Open Instagram and share your verse:\n\n' + text);
-    });
-  } else if (platform === 'copy') {
-    copyToClipboard(text).then((ok) => {
-      if (ok) showToast('Verse copied to clipboard ✓');
-      else alert('Here is your verse:\n\n' + text);
-    });
+let pendingShareVerse = null;
+
+function openShareSheet(verse) {
+  pendingShareVerse = verse;
+  document.getElementById('share-sheet-ref').textContent = verse.reference;
+  document.getElementById('share-sheet').classList.add('open');
+}
+
+function closeShareSheet() {
+  document.getElementById('share-sheet').classList.remove('open');
+  pendingShareVerse = null;
+  setShareButtonsBusy(false);
+}
+
+function onShareSheetClick(e) {
+  // Clicking the backdrop (anything that isn't the panel) closes the sheet
+  if (e.target === e.currentTarget ||
+      e.target.classList.contains('share-sheet-backdrop')) {
+    closeShareSheet();
   }
+}
+
+function shareFromReflect(format) {
+  // Called from the "Reflect & Share" screen buttons. Uses selectedVerse.
+  if (!selectedVerse) return;
+  pendingShareVerse = selectedVerse;
+  doShare(format);
+}
+
+function setShareButtonsBusy(busy) {
+  ['btn-share-post','btn-share-story','btn-share-copy'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = busy;
+  });
+}
+
+async function doShare(format) {
+  const verse = pendingShareVerse || selectedVerse;
+  if (!verse) return;
+
+  if (format === 'copy') {
+    const text = '"' + verse.text + '" — ' + verse.reference +
+                 '\n\nShared via SHEPARD · Let His word guide you';
+    const ok = await copyToClipboard(text);
+    closeShareSheet();
+    if (ok) showToast('Verse copied to clipboard ✓');
+    else alert('Here is your verse:\n\n' + text);
+    return;
+  }
+
+  setShareButtonsBusy(true);
+  try {
+    const blob = await generateVerseImage(verse, format);
+    const safeRef = verse.reference.replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    const filename = 'shepard-' + safeRef + '-' + format + '.png';
+    const file = new File([blob], filename, { type: 'image/png' });
+
+    const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
+    if (navigator.share && canShareFile) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'SHEPARD · ' + verse.reference,
+          text: '"' + verse.text + '" — ' + verse.reference
+        });
+        closeShareSheet();
+        return;
+      } catch (err) {
+        // User cancelled the share sheet, or it failed — fall through to download
+        if (err && err.name === 'AbortError') {
+          setShareButtonsBusy(false);
+          return; // just leave the sheet open so they can pick again
+        }
+      }
+    }
+
+    // Fallback: download the image
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    closeShareSheet();
+    showToast('Image saved — post it from your photos');
+  } catch (err) {
+    console.error(err);
+    setShareButtonsBusy(false);
+    alert("Sorry — couldn't create the share image. Please try again.");
+  }
+}
+
+// ---- Image generation (HTML Canvas) --------------------------------------
+async function generateVerseImage(verse, format) {
+  const W = 1080;
+  const H = format === 'story' ? 1920 : 1350;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Base background — soft cream
+  ctx.fillStyle = '#faf5ed';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle inner frame
+  ctx.strokeStyle = '#e4d8bd';
+  ctx.lineWidth = 2;
+  roundRect(ctx, 48, 48, W - 96, H - 96, 28);
+  ctx.stroke();
+
+  // Cross glyph at top
+  const crossCY = format === 'story' ? 280 : 220;
+  drawCross(ctx, W / 2, crossCY, 100);
+
+  // Reference label (green, small caps, letter-spaced)
+  const refY = crossCY + 120;
+  ctx.fillStyle = '#3B6D11';
+  ctx.font = 'bold 32px Arial, Helvetica, sans-serif';
+  drawLetterSpaced(ctx, verse.reference.toUpperCase(), W / 2, refY, 5);
+
+  // Decorative short underline
+  ctx.strokeStyle = '#c8deb0';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 42, refY + 28);
+  ctx.lineTo(W / 2 + 42, refY + 28);
+  ctx.stroke();
+
+  // Verse text — auto-fit so long passages still look balanced
+  const textTop = refY + 80;
+  const footerTop = H - 220;
+  const availableH = footerTop - textTop;
+  const maxTextW = W - 220;
+  const verseQuoted = '\u201C' + verse.text + '\u201D';
+
+  const fit = fitVerseText(ctx, verseQuoted, maxTextW, availableH);
+  ctx.fillStyle = '#2c1e0f';
+  ctx.font = 'italic ' + fit.fontSize + 'px Georgia, "Times New Roman", serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  const totalTextH = fit.lines.length * fit.lineHeight;
+  const startY = textTop + (availableH - totalTextH) / 2;
+  fit.lines.forEach((line, i) => {
+    ctx.fillText(line, W / 2, startY + i * fit.lineHeight);
+  });
+
+  // Footer divider
+  ctx.strokeStyle = '#e4d8bd';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 90, footerTop + 30);
+  ctx.lineTo(W / 2 + 90, footerTop + 30);
+  ctx.stroke();
+
+  // Watermark — SHEPARD
+  ctx.fillStyle = '#2c4a1e';
+  ctx.font = 'bold 38px Georgia, serif';
+  ctx.textBaseline = 'alphabetic';
+  drawLetterSpaced(ctx, 'SHEPARD', W / 2, footerTop + 90, 6);
+
+  // Tagline
+  ctx.fillStyle = '#7a6a50';
+  ctx.font = 'italic 22px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Let His word guide you', W / 2, footerTop + 130);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png', 0.95);
+  });
+}
+
+function drawCross(ctx, cx, cy, size) {
+  ctx.strokeStyle = '#3B6D11';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  const half = size / 2;
+  // Vertical stem
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - half);
+  ctx.lineTo(cx, cy + half);
+  ctx.stroke();
+  // Horizontal arm (positioned upper third, matching app glyph)
+  const armY = cy - half + size * 0.32;
+  const armSpan = size * 0.42;
+  ctx.beginPath();
+  ctx.moveTo(cx - armSpan, armY);
+  ctx.lineTo(cx + armSpan, armY);
+  ctx.stroke();
+}
+
+function drawLetterSpaced(ctx, text, cx, y, spacing) {
+  // Canvas doesn't have letter-spacing, so draw each character manually
+  const chars = Array.from(text);
+  const widths = chars.map(c => ctx.measureText(c).width);
+  const total = widths.reduce((a,b) => a + b, 0) + spacing * (chars.length - 1);
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  let x = cx - total / 2;
+  for (let i = 0; i < chars.length; i++) {
+    ctx.fillText(chars[i], x, y);
+    x += widths[i] + spacing;
+  }
+  ctx.textAlign = prevAlign;
+}
+
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function fitVerseText(ctx, text, maxW, maxH) {
+  // Shrinks font until the wrapped text fits within maxW x maxH
+  for (let size = 58; size >= 28; size -= 2) {
+    ctx.font = 'italic ' + size + 'px Georgia, "Times New Roman", serif';
+    const lines = wrapText(ctx, text, maxW);
+    const lineHeight = Math.round(size * 1.32);
+    if (lines.length * lineHeight <= maxH) {
+      return { lines, fontSize: size, lineHeight };
+    }
+  }
+  // Bottom-out: smallest size we allow
+  const size = 28;
+  ctx.font = 'italic ' + size + 'px Georgia, serif';
+  return {
+    lines: wrapText(ctx, text, maxW),
+    fontSize: size,
+    lineHeight: Math.round(size * 1.3)
+  };
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
 }
 
 function copyToClipboard(text) {
